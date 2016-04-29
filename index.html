@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+body {
+  font: 10px Arial, Helvetica, sans-serif;
+  background-color: #eff2ef;
+}
+
+marquee {
+  font: 10px Arial, Helvetica, sans-serif;
+  background-color: #eff2ef;
+}
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  color: black
+  shape-rendering: crispEdges;
+}
+
+.btn {
+    -webkit-transition: all .3s ease-in-out;
+    -moz-transition: all .3s ease-in-out;
+    transition: all .3s ease-in-out;
+    border-radius: 3px;
+}
+
+.btn-default {
+    border: 1px solid #8F908F;
+    color:  #8F908F;
+    background-color: transparent;
+}
+
+.fa {
+  display: inline-block;
+  font: normal normal normal 14px/1 FontAwesome;
+  font-size: inherit;
+  text-rendering: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}-ar
+
+</style>
+<body>
+<script src="//d3js.org/d3.v3.min.js"></script>
+<link href="../css/bootstrap.min.css" rel="stylesheet">
+<link href="../css/project.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.5/d3.min.js"></script>
+<link href="../font-awesome/css/font-awesome.min.css" rel="stylesheet" type="text/css">
+<script>
+
+
+var margin = {top: 20, right: 20, bottom: 30, left: 90},
+width = (990),
+height = 500 - margin.top - margin.bottom + 50;
+
+var y = d3.scale.ordinal()
+    .rangeRoundBands([height, 0], .1);
+
+var x = d3.scale.linear()
+    .rangeRound([0, width * 0.82]);
+
+var color = d3.scale.ordinal()
+    .range(["#66c2a5","#fc8d62","#8da0cb","#e78ac3","#a6d854","#ffd92f","#b3b3b3","#e5c494"]);
+
+
+var parsedate = d3.time.format("%x %X %p").parse;
+
+var yAxis = d3.svg.axis()
+    .scale(y)
+    .orient("left");
+
+var xAxis = d3.svg.axis()
+    .scale(x)
+    .orient("bottom")
+    .tickFormat(d3.format(".1%"));
+
+var opens = 0;
+var closes = 0;
+
+var today = new Date(parsedate("03/23/2016 8:00:00 AM"));
+
+var tooltip = d3.select("body")
+  .append("div")
+  .style("top", "600px")
+  .style("left", "120px")
+  .style("position", "absolute")
+  .style("z-index", "10")
+  .style("font-size", "16px") 
+  .style("font-family", "Arial, Helvetica, sans-serif")
+  .text("");
+
+var loader = d3.select("body")
+  .append("marquee")
+  .style("top", "200px")
+  .style("font-size", "16px") 
+  .style("font-family", "Arial, Helvetica, sans-serif")
+  .text("Loading, be paitent...................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................");
+
+var svg = d3.select("body").append("svg")
+    .attr("width", (width + margin.left + margin.right))
+    .attr("height", height + margin.top + margin.bottom + 50)
+    .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+var total;
+
+
+d3.csv("dated_source_data.csv", function(a){
+
+    a.Open = new Date(parsedate(a.Opened));
+    if (a.Closed != ""){
+      a.Closed = new Date(parsedate(a.Closed));
+      if(a.Open.getMonth != a.Closed.getMonth){
+        if(a.getYear() == 2016){
+          if(a.getMonth() == 2 || a.getMonth() == 3){
+              a.Closed = today;
+          }
+
+        }
+        if(daysBetween(a.Open, a.Closed) > 30){
+          a.Status = "Closed";
+        }
+      }
+      
+     
+    } 
+    else{
+      a.Closed = undefined;
+
+    }
+    return a;
+    
+
+  }
+  , function(error, data) {
+  if (error) throw error;
+
+
+
+  var sources = ["Voice In", "Web Self Service", "Open311", "Integrated Agency", "Twitter", "Other Department", "Mail In", "e-mail In"]
+  color.domain(sources);
+  var years = d3.nest().key(function(a){
+      return a.Open.getFullYear();
+  })
+  .entries(data);
+  years.forEach(function(a){
+    a.reports = a.values.length;
+    a.values = d3.nest().key(function(b){
+      return b.Source;
+    }).entries(a.values);
+    a.values.forEach(function(b){
+        a[[b.key]] = b.values.length;
+        b.values = d3.nest().key(function(c){
+            return c.Status;
+        }).entries(b.values);
+        b.values.forEach(function(c){
+            b[[c.key]] = c.values.length;
+        })
+        if(b.Open == undefined){
+          b.Open = 0;
+        }
+        if(b.Closed == undefined){
+          b.Closed = 0;
+        }
+        b.ratio = b.Open / (b.Open + b.Closed);
+        var rationame = b.key + " ratio";
+        a[rationame] = b.ratio;
+    });
+    for(var i = 0; i < sources.length; i++){
+      if (a[sources[i]] == undefined){
+          a[sources[i]] = 0;
+      }
+    }
+
+  })
+  
+
+
+  
+
+
+
+  years.forEach(function(d) {
+    var y0 = 0;
+    d.sources = color.domain().map(function(name) {
+      var rationame = name + " ratio";
+      var ratio = 1;
+      if(d[rationame] != undefined){
+        ratio = d[rationame];
+      }
+      var width = +d[name];
+      var open = width * ratio;
+      var closed = width - open;
+      return {name: name, y0: y0, y1: y0+= open, y2: y0 += closed, cases: d.reports, num: Math.floor((+d[name] / d.reports) * 10000) / 100, ratio: 100 - (Math.floor(ratio * 10000) / 100), year: d.key}; 
+    });
+    d.sources.forEach(function(d){ d.y0 /= y0; d.y1 /= y0; d.y2 /= y0});
+    d.total = d.sources[d.sources.length - 1].y2;
+  });
+
+
+
+  
+ years.sort(function(a, b) { return b.key - a.key; });
+
+
+
+  y.domain(years.map(function(d) { return d.key; }));
+
+  svg.append("text")
+        .attr("x", (width / 2))             
+        .attr("y", 0)
+        .attr("text-anchor", "middle")  
+        .style("font-size", "16px") 
+        .text("Source and Resolution Rate of 311 Cases by Year");
+
+  
+  svg.append("g")
+      .attr("class", "x axis")
+      .attr("transform", "translate(0," + height + ")")
+      .call(xAxis)
+      .append("text")
+      .attr("y", 39)
+      .attr("x", width / 2)
+      .style("text-anchor", "middle")
+      .text("Percentage of Total Cases");
+
+  svg.append("g")
+      .attr("class", "y axis")
+      .call(yAxis)
+    .append("text")
+      .attr("y", -14)
+      .attr("dy", ".71em")
+      .style("text-anchor", "end")
+      .text("Year");
+  
+  var year = svg.selectAll(".source")
+      .data(years)
+    .enter().append("g")
+      .attr("class", "g")
+      .attr("transform", function(d) {return "translate(0, " + y(d.key) + ")"; });
+
+  var yearEnter = year.selectAll("rect")
+      .data(function(d){
+        total = d.total;
+        return d.sources; 
+      })
+    .enter();
+
+    yearEnter.append("rect")
+      .attr("width", function(d) {
+        
+        return x(d.y1) - x(d.y0);
+      })
+      .attr("x", function(d) { return x(d.y0);})
+      .attr("height", function(d){ return y.rangeBand();})
+      .style("fill", function(d) { return LightenDarkenColor(color(d.name), 30); })
+      .on("mouseover", function(d){
+        var me = d3.select(this);
+        me.style("fill", LightenDarkenColor(color(d.name), -30));
+        tooltip.text(d.name + " reported " + d.num + "% of the " + d.cases +" cases in " + d.year + ", " + d.ratio + "% were closed within 30 days")
+      })
+      .on("mouseout", function(d){
+        var me = d3.select(this);
+        me.style("fill", LightenDarkenColor(color(d.name), 30));
+      });
+      
+
+    yearEnter.append("rect")
+      .attr("width", function(d) {
+        
+        return x(d.y2) - x(d.y1);
+      })
+      .attr("x", function(d) { return x(d.y1);})
+      .attr("height", function(d){ return y.rangeBand();})
+      .style("fill", function(d) { return color(d.name); })
+      .on("mouseover", function(d){
+        var me = d3.select(this);
+        me.style("fill", LightenDarkenColor(color(d.name), -30));
+        tooltip.text(d.name + " reported " + d.num + "% of the " + d.cases +" cases in " + d.year + ", " + d.ratio + "% were closed within 30 days")
+      })
+      .on("mouseout", function(d){
+        var me = d3.select(this);
+        me.style("fill", color(d.name));
+      });
+      
+
+
+
+  var legend = svg.selectAll(".legend")
+      .data(color.domain())
+    .enter().append("g")
+      .attr("class", "legend")
+      .attr("transform", function(d, i) {return "translate(0," + i * 20 + ")"; });
+
+  legend.append("rect")
+      .attr("x", width - 25)
+      .attr("width", 18)
+      .attr("height", 18)
+      .style("fill", function(d){ return LightenDarkenColor(color(d), 30);});
+
+  legend.append("rect")
+      .attr("x", width - 7)
+      .attr("width", 18)
+      .attr("height", 18)
+      .style("fill", function(d){ return color(d);});
+
+  legend.append("text")
+      .attr("x", width - 30)
+      .attr("y", 9)
+      .attr("dy", ".35em")
+      .style("font-size", "10x") 
+      .style("text-anchor", "end")
+      .text(function(d) { return d });
+
+  
+  svg.append("text")
+    .attr("x", width - 155)
+    .attr("y", 180)
+    .style("font-size", "11px") 
+    .style("text-anchor", "start")
+    // .attr("transform", "rotate(90)")
+    .text("Lighter: Open After 30 Days");
+
+  svg.append("text")
+    .attr("x", width - 155)
+    .attr("y", 200)
+    .style("font-size", "11px") 
+    .style("text-anchor", "start")
+    // .attr("transform", "rotate(90)")
+    .text("Darker: Closed Within 30 Days");
+
+  // legend.append("text")
+  //     .attr("x", width - 18)
+  //     .attr("y", 9)
+  //     .attr("dy", ".35em")
+  //     .style("text-anchor", "end")
+  //     .style("font-family", "Arial, Helvetica, sans-serif")
+  //     .text(function(d) { return d; });
+
+  loader.text("");
+  
+
+   });
+
+
+//Taken from https://css-tricks.com/snippets/javascript/lighten-darken-color/
+function LightenDarkenColor(col, amt) {
+    var usePound = false;
+    if (col[0] == "#") {
+        col = col.slice(1);
+        usePound = true;
+    }
+    var num = parseInt(col,16);
+ 
+    var r = (num >> 16) + amt;
+ 
+    if (r > 255) r = 255;
+    else if  (r < 0) r = 0;
+ 
+    var b = ((num >> 8) & 0x00FF) + amt;
+ 
+    if (b > 255) b = 255;
+    else if  (b < 0) b = 0;
+ 
+    var g = (num & 0x0000FF) + amt;
+ 
+    if (g > 255) g = 255;
+    else if (g < 0) g = 0;
+ 
+    return (usePound?"#":"") + (g | (b << 8) | (r << 16)).toString(16);
+  
+}
+
+//Taken from http://stackoverflow.com/questions/1036742/date-difference-in-javascript-ignoring-time-of-day
+function daysBetween(first, second) {
+
+    // Copy date parts of the timestamps, discarding the time parts.
+    var one = new Date(first.getFullYear(), first.getMonth(), first.getDate());
+    var two = new Date(second.getFullYear(), second.getMonth(), second.getDate());
+
+    // Do the math.
+    var millisecondsPerDay = 1000 * 60 * 60 * 24;
+    var millisBetween = two.getTime() - one.getTime();
+    var days = millisBetween / millisecondsPerDay;
+
+    // Round down.
+    return Math.floor(days);
+}
+
+function mouseon(d, me){
+  me.style("fill", LightenDarkenColor(color(d), -30));
+  tooltip.text(d.name + " reported " + d.num + "% of the " + d.cases +" cases in " + d.year + ", " + d.ratio + "% were closed within 30 days")
+}
+
+
+
+
+</script>
